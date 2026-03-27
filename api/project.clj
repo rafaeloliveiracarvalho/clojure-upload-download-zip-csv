@@ -15,7 +15,8 @@
                  [software.amazon.awssdk/auth "2.25.10"]
                  ;; Database
                  [com.github.seancorfield/next.jdbc "1.3.939"]
-                 [org.postgresql/postgresql "42.7.3"]]
+                 [org.postgresql/postgresql "42.7.3"]
+                 [com.taoensso/timbre "6.1.0"]]
 
   :main ^:skip-aot clojure-download-zip-csv.core
   :target-path "target/%s"

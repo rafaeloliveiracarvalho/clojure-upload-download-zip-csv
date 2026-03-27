@@ -6,6 +6,7 @@
            [software.amazon.awssdk.regions Region]
            [software.amazon.awssdk.core.sync RequestBody]
            [java.net URI]
+           [java.io File]
            [java.util.function Consumer]))
 
 (def bucket "csv-bucket")
@@ -44,6 +45,16 @@
   (.putObject s3-client 
               (-> (PutObjectRequest/builder) (.bucket bucket) (.key key) (.build))
               (RequestBody/fromFile temp-file)))
+
+(defn upload-stream! [key input-stream content-length]
+  (.putObject s3-client 
+              (-> (PutObjectRequest/builder) 
+                  (.bucket bucket) 
+                  (.key key)
+                  (.contentLength (long content-length))
+                  (.contentType "application/zip")
+                  (.build))
+              (RequestBody/fromInputStream input-stream content-length)))
 
 (defn get-file-stream [key]
   (.getObject s3-client (-> (GetObjectRequest/builder) (.bucket bucket) (.key key) (.build))))
