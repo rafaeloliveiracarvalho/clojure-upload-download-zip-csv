@@ -1,12 +1,10 @@
 (ns clojure-download-zip-csv.s3
-  (:require [clojure.java.io :as io])
-  (:import [software.amazon.awssdk.services.s3 S3Client S3Configuration]
+  (:import [software.amazon.awssdk.services.s3 S3Client]
            [software.amazon.awssdk.services.s3.model GetObjectRequest CreateBucketRequest HeadBucketRequest PutObjectRequest]
            [software.amazon.awssdk.auth.credentials StaticCredentialsProvider AwsBasicCredentials]
            [software.amazon.awssdk.regions Region]
            [software.amazon.awssdk.core.sync RequestBody]
            [java.net URI]
-           [java.io File]
            [java.util.function Consumer]))
 
 (def bucket "csv-bucket")

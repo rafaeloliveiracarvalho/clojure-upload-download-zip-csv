@@ -41,4 +41,4 @@
   (jdbc/execute! ds ["SELECT id, original_name, upload_date, upload_timestamp, s3_key, file_type FROM files"]))
 
 (defn find-file-by-id [id]
-  (jdbc/execute-one! ds ["SELECT s3_key, original_name FROM files WHERE id = ?" id]))
+  (jdbc/execute-one! ds ["SELECT s3_key, original_name, file_type FROM files WHERE id = ?" id]))
