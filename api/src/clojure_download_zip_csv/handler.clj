@@ -33,3 +33,15 @@
         (timbre/error "[DOWNLOAD FAILURE] ID:" id-str "- Erro:" (:message result))
         (-> (response/response (:message result))
             (response/status 404))))))
+
+(defn report-handler [_]
+  (let [result (service/generate-report!)]
+    (if (= (:status result) :success)
+      (do
+        (timbre/info "[REPORT SUCCESS] ID:" (:id result) "- Relatório gerado com sucesso")
+        (-> (response/response {:message "Relatório gerado com sucesso" :id (:id result)})
+            (response/status 201)))
+      (do
+        (timbre/error "[REPORT FAILURE] Erro:" (:message result))
+        (-> (response/response {:error (:message result)})
+            (response/status 500))))))

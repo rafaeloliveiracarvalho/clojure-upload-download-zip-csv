@@ -13,6 +13,7 @@
     ["/api"
      ["/upload" {:post handler/upload-handler}]
      ["/files" {:get handler/list-files-handler}]
+     ["/files/report" {:get handler/report-handler}]
      ["/download/:id" {:get handler/download-handler}]]
     {:data {:muuntaja m/instance
             :middleware [parameters/parameters-middleware

@@ -17,21 +17,28 @@
                       original_name VARCHAR(255),
                       upload_date VARCHAR(20),
                       upload_timestamp BIGINT,
-                      s3_key VARCHAR(255)
-                    )"]))
+                      s3_key VARCHAR(255),
+                      file_type VARCHAR(20) DEFAULT 'upload'
+                    )"])
+  (try
+    (jdbc/execute! ds ["ALTER TABLE files ADD COLUMN IF NOT EXISTS file_type VARCHAR(20) DEFAULT 'upload'"])
+    (catch Exception _)))
 
 (defn save-file-metadata! [metadata]
-  (jdbc/execute! ds ["INSERT INTO files (id, original_name, upload_date, upload_timestamp, s3_key) 
-                      VALUES (?, ?, ?, ?, ?)" 
+  (jdbc/execute! ds ["INSERT INTO files (id, original_name, upload_date, upload_timestamp, s3_key, file_type) 
+                      VALUES (?, ?, ?, ?, ?, ?)" 
                      (:id metadata) 
                      (:original_name metadata) 
                      (:upload_date metadata) 
                      (:upload_timestamp metadata) 
-                     (:s3_key metadata)]))
+                     (:s3_key metadata)
+                     (or (:file_type metadata) "upload")]))
 
 (defn find-all-files []
-  ;; PostgreSQL returns lowercase column names by default in next.jdbc
-  (jdbc/execute! ds ["SELECT id, original_name, upload_date, upload_timestamp FROM files"]))
+  (jdbc/execute! ds ["SELECT id, original_name, upload_date, upload_timestamp, file_type FROM files"]))
+
+(defn find-all-files-full []
+  (jdbc/execute! ds ["SELECT id, original_name, upload_date, upload_timestamp, s3_key, file_type FROM files"]))
 
 (defn find-file-by-id [id]
   (jdbc/execute-one! ds ["SELECT s3_key, original_name FROM files WHERE id = ?" id]))

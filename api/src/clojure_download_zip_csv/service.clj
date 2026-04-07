@@ -5,8 +5,9 @@
   (:import [java.time LocalDateTime]
            [java.time.format DateTimeFormatter]
            [java.util UUID]
-           [java.io ByteArrayOutputStream ByteArrayInputStream]
-           [java.util.zip ZipInputStream ZipEntry]))
+           [java.io ByteArrayOutputStream ByteArrayInputStream File]
+           [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
+           [java.util.zip ZipInputStream ZipOutputStream ZipEntry]))
 
 (defn create-zip-stream [filename content]
   (let [bos (ByteArrayOutputStream.)
@@ -64,13 +65,73 @@
         file-record (when id (db/find-file-by-id id))]
     (if file-record
       (let [s3-key (:files/s3_key file-record)
-            original-name (:files/original_name file-record)]
+            original-name (:files/original_name file-record)
+            filename (clojure.string/replace original-name #"\.zip$" ".csv")]
         (try
           (let [zip-stream (s3/get-file-stream s3-key)
                 csv-content (extract-csv-from-zip zip-stream)]
             {:status :success 
              :stream (ByteArrayInputStream. (.getBytes csv-content "UTF-8")) 
-             :filename original-name})
+             :filename filename})
           (catch Exception _
             {:status :error :message "Erro ao buscar arquivo no S3"})))
       {:status :error :message "Arquivo não encontrado"})))
+
+(defn- row-to-csv-line [row]
+  (let [id (or (get row :files/id) (get row :id) "")
+        original-name (or (get row :files/original_name) (get row :original_name) "")
+        upload-date (or (get row :files/upload_date) (get row :upload_date) "")
+        upload-timestamp (or (get row :files/upload_timestamp) (get row :upload_timestamp) "")
+        s3-key (or (get row :files/s3_key) (get row :s3_key) "")
+        file-type (or (get row :files/file_type) (get row :file_type) "upload")]
+    (str id "," original-name "," upload-date "," upload-timestamp "," s3-key "," file-type)))
+
+(defn- write-csv-header [writer]
+  (.write writer "id,original_name,upload_date,upload_timestamp,s3_key,file_type\n"))
+
+(defn- write-csv-row [writer row]
+  (.write writer (row-to-csv-line row))
+  (.newLine writer))
+
+(defn generate-report! []
+  (let [files-data (db/find-all-files-full)
+        id (UUID/randomUUID)
+        timestamp (System/currentTimeMillis)
+        filename (str timestamp "_relatorio.csv")
+        zip-filename (str filename ".zip")
+        s3-key (str id "-" zip-filename)
+        temp-file (io/file (str "/tmp/" filename))
+        csv-file (io/file (str "/tmp/" filename))
+        zip-file (io/file (str "/tmp/" zip-filename))
+        now (LocalDateTime/now)
+        date-str (.format now (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
+    
+    (try
+      (with-open [writer (BufferedWriter. (OutputStreamWriter. (io/output-stream csv-file) "UTF-8"))]
+        (write-csv-header writer)
+        (doseq [row files-data]
+          (write-csv-row writer row)))
+      
+      (with-open [zip-out (ZipOutputStream. (io/output-stream zip-file))]
+        (.putNextEntry zip-out (ZipEntry. filename))
+        (io/copy csv-file zip-out)
+        (.closeEntry zip-out))
+      
+      (s3/upload-file! s3-key zip-file)
+      
+      (db/save-file-metadata! {:id id
+                               :original_name (str timestamp "_relatorio.zip")
+                               :upload_date date-str
+                               :upload_timestamp timestamp
+                               :s3_key s3-key
+                               :file_type "relatorio"})
+      
+      (io/delete-file csv-file)
+      (io/delete-file zip-file)
+      
+      {:status :success :id id :filename (str timestamp "_relatorio.zip")}
+      
+      (catch Exception e
+        (io/delete-file csv-file)
+        (io/delete-file zip-file)
+        {:status :error :message (.getMessage e)}))))
