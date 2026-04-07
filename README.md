@@ -1,100 +1,173 @@
-# 🛡️ Clojure S3 Download API
+# API de Upload/Download de Arquivos CSV
 
-Esta API em Clojure gerencia o download de arquivos CSV zipados armazenados no AWS S3. Ela foi projetada para ser eficiente, utilizando streaming de dados para evitar consumo excessivo de memória RAM.
+API em Clojure para gerenciamento de arquivos CSV com armazenamento em S3. Projetada para ser eficiente com arquivos grandes, utilizando streaming de dados e processamento em lote.
 
-## 🚀 Tecnologias
+## Stack Tecnológico
 
-- **Linguagem**: Clojure (Gerenciado via Leiningen)
-- **Web**: Reitit (Roteamento) + Ring/Jetty (Servidor)
-- **AWS SDK**: Java SDK V2 (software.amazon.awssdk)
-- **Infra Local**: LocalStack (S3)
+| Componente | Tecnologia |
+|------------|------------|
+| **Linguagem** | Clojure 1.12 |
+| **Web Framework** | Reitit (roteamento) + Ring/Jetty (servidor) |
+| **Banco de Dados** | PostgreSQL (next.jdbc) |
+| **Armazenamento** | S3Proxy (AWS S3 local) |
+| **Frontend** | re-frame + shadow-cljs + Bulma |
+| **Logging** | Timbre |
 
-## 🛠️ Configuração do Ambiente
+## Funcionalidades
 
-### 1. Iniciar o S3 Local (LocalStack)
-Se estiver no **Bluefin (Podman)** ou **WSL2 (Docker)**, execute:
+- **Upload de arquivos CSV**: Arquivos são compactados em ZIP e armazenados no S3
+- **Download de arquivos**: Descompactação automática do ZIP, retornando o CSV original
+- **Listagem de arquivos**: Metadados de todos os arquivos enviados
+- **Geração de relatórios**: Relatório CSV com todos os arquivos (suporta 1M+ linhas via batch processing)
+- **Streaming**: Operações com memória constante, independente do tamanho do arquivo
 
-```bash
-docker run --rm -it \
-  -p 4566:4566 \
-  -p 4510-4559:4510-4559 \
-  -e SERVICES=s3 \
-  localstack/localstack
+## Arquitetura
+
+### Estrutura de Namespaces
+
+```
+clojure-download-zip-csv/
+├── api/src/clojure_download_zip_csv/
+│   ├── core.clj       # Ponto de entrada, inicialização
+│   ├── routes.clj     # Definição de rotas Reitit
+│   ├── handler.clj    # Handlers HTTP (upload, download, list, report)
+│   ├── service.clj    # Lógica de negócio
+│   ├── db.clj         # Acesso ao PostgreSQL
+│   └── s3.clj         # Operações com S3
+├── front/src/clojure_download_zip_csv/frontend/
+│   ├── core.cljs      # inicialização re-frame
+│   ├── events.cljs    # Eventos e efeitos
+│   ├── subs.cljs      # Subscribe/Estado
+│   └── views.cljs     # Componentes UI
+└── docs/
+    └── service.md     # Documentação detalhada do service.clj
 ```
 
-### 2. Configurar Credenciais de Desenvolvimento
-A SDK exige que existam credenciais configuradas, mesmo que "fakes" para o LocalStack:
+### Decisões Técnicas
 
-```bash
-aws configure set aws_access_key_id testing
-aws configure set aws_secret_access_key testing
-aws configure set region us-east-1
+- **Streaming para Upload**: Arquivo temporário → ZIP → S3 (memória constante)
+- **Streaming para Download**: S3 → ZIP → PipedInputStream → Response (buffer 8KB)
+- **Batch Processing para Relatórios**: 10.000 registros por vez (evita estouro de memória)
+- **Separação de Responsabilidades**: Cada namespace tem função específica
+
+## Configuração
+
+### Variáveis de Ambiente
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `DB_HOST` | localhost | Host do PostgreSQL |
+| `DB_PORT` | 5432 | Porta do PostgreSQL |
+| `DB_NAME` | files_db | Nome do banco |
+| `DB_USER` | postgres | Usuário PostgreSQL |
+| `DB_PASSWORD` | postgres | Senha PostgreSQL |
+| `S3_ENDPOINT` | http://127.0.0.1:8001 | Endpoint do S3 |
+
+### Docker Compose
+
+O projeto utiliza Docker Compose para desenvolvimento local:
+
+```yaml
+services:
+  db:
+    image: postgres:16-alpine
+    
+  s3:
+    image: andrewgaul/s3proxy
+    environment:
+      - S3PROXY_AUTHORIZATION=none
+      
+  api:
+    build: ./api
+    
+  front:
+    build: ./front
 ```
 
-## 📦 Gerenciamento de Arquivos (CLI)
+## Endpoints da API
 
-Use estes comandos para popular seu S3 local antes de testar a API.
+| Método | Endpoint | Descrição | Corpo/Params |
+|--------|----------|-----------|--------------|
+| POST | `/api/upload` | Upload de arquivo CSV | multipart/form-data |
+| GET | `/api/files` | Lista todos os arquivos | - |
+| GET | `/api/files/report` | Gera relatório CSV | - |
+| GET | `/api/download/:id` | Download arquivo | path param |
 
-> **Dica**: No WSL ou Bluefin, adicione `alias awslocal='aws --endpoint-url=http://127.0.0.1:4566'` ao seu `~/.zshrc`.
+### Exemplos de Uso
 
-### Criar o Bucket
+**Upload de arquivo:**
 ```bash
-aws --endpoint-url=http://127.0.0.1:4566 s3 mb s3://meu-bucket-de-testes
+curl -X POST -F "file=@dados.csv" http://localhost:3000/api/upload
 ```
 
-### Preparar e Subir um arquivo de teste
+**Listar arquivos:**
 ```bash
-# Criar um CSV e zipar
-echo "id,nome\n1,Teste" > dados.csv
-zip 123-s3.zip dados.csv
-
-# Upload para o S3
-aws --endpoint-url=http://127.0.0.1:4566 s3 cp 123-s3.zip s3://meu-bucket-de-testes/123-s3.zip
+curl http://localhost:3000/api/files
 ```
 
-### Listar arquivos
+**Gerar relatório:**
 ```bash
-aws --endpoint-url=http://127.0.0.1:4566 s3 ls s3://meu-bucket-de-testes --recursive
+curl http://localhost:3000/api/files/report
 ```
 
-## 💻 Execução da Aplicação
+**Download de arquivo:**
+```bash
+curl -o arquivo.csv "http://localhost:3000/api/download/{id}"
+```
 
-### 1. Dependências (project.clj)
-Certifique-se de que seu arquivo de projeto contenha:
+## Como Rodar
+
+### Pré-requisitos
+
+- Docker/Podman
+- Docker Compose
+
+### Executar
+
+```bash
+# Iniciar todos os serviços
+podman compose up --build
+
+# Acessar a aplicação
+# Frontend: http://localhost:3001
+# API: http://localhost:3000
+```
+
+## Estrutura do Banco de Dados
+
+### Tabela: files
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID | PK - Identificador único |
+| original_name | VARCHAR(255) | Nome original do arquivo |
+| upload_date | VARCHAR(20) | Data/hora do upload (formatado) |
+| upload_timestamp | BIGINT | Timestamp Unix do upload |
+| s3_key | VARCHAR(255) | Chave do arquivo no S3 |
+| file_type | VARCHAR(20) | Tipo: "upload" ou "relatorio" |
+
+## Tratamento de Erros
+
+A API retorna respostas consistentes em caso de erros:
 
 ```clojure
-:dependencies [[org.clojure/clojure "1.11.1"]
-               [metosin/reitit "0.7.0"]
-               [ring/ring-core "1.11.0"]
-               [ring/ring-jetty-adapter "1.11.0"]
-               [software.amazon.awssdk/s3 "2.25.10"]
-               [software.amazon.awssdk/auth "2.25.10"]]
+;; Sucesso
+{:status :success :id "uuid" :filename "arquivo.csv"}
+
+;; Erro
+{:status :error :message "Descrição do erro"}
 ```
 
-### 2. Rodar o Servidor
-```bash
-lein run
-```
+Códigos de status HTTP:
+- 200/201: Sucesso
+- 400: Erro de validação (ex: arquivo não é CSV)
+- 404: Arquivo não encontrado
+- 500: Erro interno (banco, S3, etc)
 
-## 🛰️ API Endpoints
+## Documentação Adicional
 
-| Método | Endpoint              | Parâmetro | Descrição                               |
-|--------|-----------------------|-----------|-----------------------------------------|
-| GET    | `/api/health`         | -         | Verifica se a API está online           |
-| GET    | `/api/download?id=123`| `id`      | Faz o download do arquivo `{id}-s3.zip` |
+- [Documentação detalhada do service.clj](docs/service.md) - Explicação linha a linha de todas as funções
 
-**Exemplo de URL:** `http://localhost:3000/api/download?id=123`
+## Licença
 
-## 🔍 Notas para Desenvolvedores
-
-### 🐧 No Bluefin (Distrobox)
-- Sempre use `127.0.0.1` em vez de `localhost` no código Clojure para evitar problemas de resolução IPv6 dentro do container.
-- O Neovim (LazyVim) deve ser aberto dentro do `distrobox enter dev-web` para que o LSP encontre as dependências do Leiningen.
-
-### 🪟 No WSL2
-- O Windows compartilha o `localhost` com o WSL2. Você pode abrir o browser no Windows e acessar a API rodando no Linux normalmente.
-- Se o Docker estiver no Windows (Docker Desktop), garanta que a integração WSL2 está ligada nas configurações do Docker.
-
-## 🛡️ Tratamento de Erros
-
-A aplicação utiliza um bloco `try/catch` no handler de download. Se o arquivo não existir no S3, a API retornará um `404 Not Found` com a mensagem "Arquivo não encontrado".
+EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0
