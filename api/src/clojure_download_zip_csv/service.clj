@@ -109,37 +109,40 @@
         filename (str timestamp "_relatorio.csv")
         zip-filename (str filename ".zip")
         s3-key (str id "-" zip-filename)
-        csv-file (io/file (str "/tmp/" filename))
         zip-file (io/file (str "/tmp/" zip-filename))
         now (LocalDateTime/now)
         date-str (.format now (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
     
     (try
-      (with-open [writer (BufferedWriter. (OutputStreamWriter. (io/output-stream csv-file) "UTF-8"))]
-        (write-csv-header writer)
-        (doseq [row files-data]
-          (write-csv-row writer row)))
-      
-      (with-open [zip-out (ZipOutputStream. (io/output-stream zip-file))]
-        (.putNextEntry zip-out (ZipEntry. filename))
-        (io/copy csv-file zip-out)
-        (.closeEntry zip-out))
-      
-      (s3/upload-file! s3-key zip-file)
-      
-      (db/save-file-metadata! {:id id
-                               :original_name (str timestamp "_relatorio.zip")
-                               :upload_date date-str
-                               :upload_timestamp timestamp
-                               :s3_key s3-key
-                               :file_type "relatorio"})
-      
-      (io/delete-file csv-file)
-      (io/delete-file zip-file)
-      
-      {:status :success :id id :filename (str timestamp "_relatorio.zip")}
-      
-      (catch Exception e
+      (let [csv-file (io/file (str "/tmp/" filename))]
+        (with-open [writer (BufferedWriter. (OutputStreamWriter. (io/output-stream csv-file) "UTF-8"))]
+          (write-csv-header writer)
+          (doseq [row files-data]
+            (write-csv-row writer row))))
+        
+        (with-open [zip-out (ZipOutputStream. (io/output-stream zip-file))]
+          (.putNextEntry zip-out (ZipEntry. filename))
+          (io/copy csv-file zip-out)
+          (.closeEntry zip-out))
+        
+        (let [zip-size (.length zip-file)
+              zip-stream (io/input-stream zip-file)]
+          (s3/upload-stream! s3-key zip-stream zip-size)
+          (.close zip-stream))
+        
+        (db/save-file-metadata! {:id id
+                                 :original_name (str timestamp "_relatorio.zip")
+                                 :upload_date date-str
+                                 :upload_timestamp timestamp
+                                 :s3_key s3-key
+                                 :file_type "relatorio"})
+        
         (io/delete-file csv-file)
         (io/delete-file zip-file)
-        {:status :error :message (.getMessage e)}))))
+        
+        {:status :success :id id :filename (str timestamp "_relatorio.zip")}
+        
+        (catch Exception e
+          (io/delete-file csv-file)
+          (io/delete-file zip-file)
+          {:status :error :message (.getMessage e)}))))

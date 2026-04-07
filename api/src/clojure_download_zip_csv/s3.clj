@@ -39,11 +39,6 @@
     (catch Exception e
       (println "S3 Setup Exception:" (.getMessage e)))))
 
-(defn upload-file! [key temp-file]
-  (.putObject s3-client 
-              (-> (PutObjectRequest/builder) (.bucket bucket) (.key key) (.build))
-              (RequestBody/fromFile temp-file)))
-
 (defn upload-stream! [key input-stream content-length]
   (.putObject s3-client 
               (-> (PutObjectRequest/builder) 
