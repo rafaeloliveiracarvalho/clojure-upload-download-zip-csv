@@ -41,6 +41,10 @@
     [:section.section
      [:div.container
       [:h1.title "Arquivos Enviados"]
+      [:div.field.mb-4
+       [:button.button.is-success
+        {:on-click #(rf/dispatch [:generate-report])}
+        "Gerar Relatório"]]
       [:table.table.is-fullwidth.is-striped
        [:thead
         [:tr
@@ -48,13 +52,15 @@
          [:th "Nome Original"]
          [:th "Data de Upload"]
          [:th "Timestamp"]
+         [:th "Tipo"]
          [:th "Ações"]]]
        [:tbody
         (for [f files]
           (let [id (:files/id f)
                 name (:files/original_name f)
                 date (:files/upload_date f)
-                ts (:files/upload_timestamp f)]
+                ts (:files/upload_timestamp f)
+                file-type (:files/file_type f)]
             [:tr {:key id}
              [:td [:a {:href "#" 
                        :on-click #(do (.preventDefault %) 
@@ -63,6 +69,8 @@
              [:td name]
              [:td date]
              [:td ts]
+             [:td [:span.tag (if (= file-type "relatorio") "is-success" "is-info") 
+                   (if (= file-type "relatorio") "Relatório" "Upload")]]
              [:td [:button.button.is-small.is-info 
                     {:on-click #(rf/dispatch [:download-file id])} 
                     "Download"]]]))]]]]))

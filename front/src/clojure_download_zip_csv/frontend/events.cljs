@@ -63,3 +63,23 @@
  (fn [db [_ error]]
    (println "API Error:" error)
    db))
+
+(rf/reg-event-fx
+ :generate-report
+ (fn [{:keys [db]} _]
+   {:http-xhrio {:method          :get
+                 :uri             "http://localhost:3000/api/files/report"
+                 :response-format (ajax/json-response-format {:keywords? true})
+                 :on-success      [:generate-report-success]
+                 :on-failure      [:generate-report-failure]}}))
+
+(rf/reg-event-db
+ :generate-report-success
+ (fn [db [_ response]]
+   (rf/dispatch [:fetch-files])
+   (assoc db :upload-status (str "Relatório gerado com sucesso! ID: " (:id response)))))
+
+(rf/reg-event-db
+ :generate-report-failure
+ (fn [db [_ error]]
+   (assoc db :upload-status (str "Erro ao gerar relatório: " (get-in error [:response :error] "Erro desconhecido")))))
