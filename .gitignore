@@ -30,6 +30,9 @@ pom.xml.asc
 .lsp/
 .shadow-cljs/
 
+# Local data
+data/
+
 # Compiled class file
 *.class
 
