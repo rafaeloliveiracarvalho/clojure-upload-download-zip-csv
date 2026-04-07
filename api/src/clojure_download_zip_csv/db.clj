@@ -42,3 +42,11 @@
 
 (defn find-file-by-id [id]
   (jdbc/execute-one! ds ["SELECT s3_key, original_name, file_type FROM files WHERE id = ?" id]))
+
+(defn count-files []
+  (let [result (jdbc/execute-one! ds ["SELECT COUNT(*) as cnt FROM files"])]
+    (:cnt result)))
+
+(defn find-files-batch [offset limit]
+  (jdbc/execute! ds ["SELECT id, original_name, upload_date, upload_timestamp, s3_key, file_type 
+                     FROM files ORDER BY id LIMIT ? OFFSET ?" limit offset]))

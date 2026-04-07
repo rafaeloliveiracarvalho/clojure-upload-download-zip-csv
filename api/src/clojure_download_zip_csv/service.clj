@@ -102,8 +102,10 @@
   (.write writer (row-to-csv-line row))
   (.newLine writer))
 
+(def batch-size 10000)
+
 (defn generate-report! []
-  (let [files-data (db/find-all-files-full)
+  (let [total-count (db/count-files)
         id (UUID/randomUUID)
         timestamp (System/currentTimeMillis)
         filename (str timestamp "_relatorio.csv")
@@ -117,8 +119,12 @@
     (try
       (with-open [writer (BufferedWriter. (OutputStreamWriter. (io/output-stream csv-file) "UTF-8"))]
         (write-csv-header writer)
-        (doseq [row files-data]
-          (write-csv-row writer row)))
+        (loop [offset 0]
+          (let [batch (db/find-files-batch offset batch-size)]
+            (when (seq batch)
+              (doseq [row batch]
+                (write-csv-row writer row))
+              (recur (+ offset batch-size))))))
       
       (with-open [zip-out (ZipOutputStream. (io/output-stream zip-file))]
         (.putNextEntry zip-out (ZipEntry. filename))
@@ -140,7 +146,7 @@
       (io/delete-file csv-file)
       (io/delete-file zip-file)
       
-      {:status :success :id id :filename (str timestamp "_relatorio.zip")}
+      {:status :success :id id :filename (str timestamp "_relatorio.zip") :total-records total-count}
       
       (catch Exception e
         (io/delete-file csv-file)
